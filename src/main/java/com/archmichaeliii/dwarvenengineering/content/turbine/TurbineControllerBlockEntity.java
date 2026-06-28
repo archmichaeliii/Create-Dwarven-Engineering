@@ -31,26 +31,43 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Heart of the multiblock turbine: stores fuel, validates the casing structure, burns matching
+ * Heart of the multiblock turbine: validates the casing structure, stores fuel, burns matching
  * {@code turbine_fuel} recipes and pushes the resulting Watts into its {@link TurbineDevice} so
  * Electro Energetics can pull power off the grid.
+ *
+ * <p><b>Structure:</b> a hollow rectangular box of {@link TurbineCasingBlock} between {@link #MIN_DIM}
+ * and {@link #MAX_DIM} on each axis, with this controller embedded in one of the six walls and an
+ * empty (air) interior — the combustion chamber. Power scales with the chamber volume. Validation
+ * runs entirely here (the controller is a fixed-position electrical device, so Create's
+ * corner-reassigning {@code ConnectivityHandler} is not used); it re-checks every {@code lazyTick}
+ * (~½ s), which forms the turbine when the box is completed and tears it down when it is broken.</p>
  */
 public class TurbineControllerBlockEntity extends SmartBlockEntity implements IHaveGoggleInformation {
 
     /** Output voltage in Volts. */
     public static final double TURBINE_VOLTAGE = 120.0;
-    /** Minimum connected casing blocks required for the turbine to run. */
-    public static final int MIN_CASING = 4;
-    /** Upper bound on the casing flood-fill, both a balance cap and a safety bound. */
-    public static final int MAX_CASING_SCAN = 64;
+    /** Smallest allowed box edge (must be >= 3 so a hollow interior exists). */
+    public static final int MIN_DIM = 3;
+    /** Largest allowed box edge. */
+    public static final int MAX_DIM = 7;
+    /** Cap on the power multiplier so very large turbines don't scale without bound. */
+    public static final int MAX_POWER_MULT = 16;
     /** Fuel tank capacity in millibuckets. */
     public static final int FUEL_CAPACITY = 8000;
+
+    // Reasons a structure failed to form (synced for the goggle hint).
+    private static final int REASON_NONE = 0;
+    private static final int REASON_SIZE = 1;     // too small, too large, or not box-shaped
+    private static final int REASON_SHELL = 2;    // a wall position isn't casing/controller
+    private static final int REASON_CHAMBER = 3;  // the interior isn't empty
 
     public SmartFluidTankBehaviour tank;
     public TurbineFuelRecipe currentFuel = null;
 
-    public int structureSize = 0;
     public boolean formed = false;
+    public int dimX, dimY, dimZ;          // assembled box dimensions (0 when unformed)
+    public int interiorVolume = 0;        // (dimX-2)*(dimY-2)*(dimZ-2)
+    private int unformedReason = REASON_SIZE;
     public double currentPowerWatts = 0;
 
     // client-only visual state (kept for a future rotor renderer)
@@ -94,8 +111,7 @@ public class TurbineControllerBlockEntity extends SmartBlockEntity implements IH
         super.lazyTick();
         if (level == null || level.isClientSide)
             return;
-        structureSize = scanStructure();
-        formed = structureSize >= MIN_CASING;
+        validateStructure();
         refreshFuel();
         sendData();
     }
@@ -139,42 +155,125 @@ public class TurbineControllerBlockEntity extends SmartBlockEntity implements IH
         }
     }
 
-    /** Power scales with the assembled casing count: MIN_CASING blocks = 1x, double the casing = 2x, etc. */
+    /** Power scales with the combustion-chamber volume (tunable; capped at {@link #MAX_POWER_MULT}). */
     public double powerMultiplier() {
-        return Math.max(1.0, structureSize / (double) MIN_CASING);
+        return Math.min(MAX_POWER_MULT, Math.max(1, interiorVolume));
     }
 
-    /** Bounded flood-fill of casing blocks connected to this controller. */
-    private int scanStructure() {
-        Set<BlockPos> visited = new HashSet<>();
+    // --- Multiblock validation ---------------------------------------------------------------
+
+    /**
+     * Re-evaluate the structure: flood-fill the casing/controller shell starting from this block,
+     * take its bounding box, then confirm it is a hollow box of valid size with this controller in a
+     * wall and an empty interior. Sets {@link #formed}, {@link #dimX}/{@link #dimY}/{@link #dimZ},
+     * {@link #interiorVolume} and {@link #unformedReason}.
+     */
+    private void validateStructure() {
+        // Flood-fill the connected casing + controller blocks (the box shell is 6-connected).
+        Set<BlockPos> members = new HashSet<>();
         ArrayDeque<BlockPos> queue = new ArrayDeque<>();
-        for (Direction d : Direction.values()) {
-            BlockPos n = worldPosition.relative(d);
-            if (isCasing(n))
-                queue.add(n);
-        }
-        while (!queue.isEmpty() && visited.size() < MAX_CASING_SCAN) {
+        members.add(worldPosition);
+        queue.add(worldPosition);
+        int cap = (MAX_DIM + 2) * (MAX_DIM + 2) * (MAX_DIM + 2);
+        while (!queue.isEmpty()) {
+            if (members.size() > cap) { // leaky / oversized structure
+                setUnformed(REASON_SIZE);
+                return;
+            }
             BlockPos p = queue.poll();
-            if (!visited.add(p))
-                continue;
             for (Direction d : Direction.values()) {
                 BlockPos n = p.relative(d);
-                if (!visited.contains(n) && isCasing(n))
-                    queue.add(n);
+                if (members.add(n)) {
+                    if (isShellBlock(n))
+                        queue.add(n);
+                    else
+                        members.remove(n); // not part of the structure; don't traverse
+                }
             }
         }
-        return visited.size();
+
+        // Bounding box of the gathered shell.
+        int minX = Integer.MAX_VALUE, minY = Integer.MAX_VALUE, minZ = Integer.MAX_VALUE;
+        int maxX = Integer.MIN_VALUE, maxY = Integer.MIN_VALUE, maxZ = Integer.MIN_VALUE;
+        for (BlockPos p : members) {
+            minX = Math.min(minX, p.getX()); maxX = Math.max(maxX, p.getX());
+            minY = Math.min(minY, p.getY()); maxY = Math.max(maxY, p.getY());
+            minZ = Math.min(minZ, p.getZ()); maxZ = Math.max(maxZ, p.getZ());
+        }
+        int dx = maxX - minX + 1, dy = maxY - minY + 1, dz = maxZ - minZ + 1;
+
+        if (dx < MIN_DIM || dy < MIN_DIM || dz < MIN_DIM
+                || dx > MAX_DIM || dy > MAX_DIM || dz > MAX_DIM) {
+            setUnformed(REASON_SIZE);
+            return;
+        }
+
+        // Every position in the box must be: wall -> casing/this-controller, interior -> air.
+        int controllers = 0;
+        BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    boolean onShell = x == minX || x == maxX || y == minY || y == maxY || z == minZ || z == maxZ;
+                    p.set(x, y, z);
+                    BlockState state = level.getBlockState(p);
+                    if (onShell) {
+                        if (state.getBlock() instanceof TurbineControllerBlock) {
+                            if (!p.equals(worldPosition)) { // a second controller in the shell
+                                setUnformed(REASON_SHELL);
+                                return;
+                            }
+                            controllers++;
+                        } else if (!(state.getBlock() instanceof TurbineCasingBlock)) {
+                            setUnformed(REASON_SHELL);
+                            return;
+                        }
+                    } else if (!state.isAir()) {
+                        setUnformed(REASON_CHAMBER);
+                        return;
+                    }
+                }
+            }
+        }
+        if (controllers != 1) {
+            setUnformed(REASON_SHELL);
+            return;
+        }
+
+        formed = true;
+        dimX = dx; dimY = dy; dimZ = dz;
+        interiorVolume = (dx - 2) * (dy - 2) * (dz - 2);
+        unformedReason = REASON_NONE;
     }
 
-    private boolean isCasing(BlockPos pos) {
-        return level.getBlockState(pos).getBlock() instanceof TurbineCasingBlock;
+    private void setUnformed(int reason) {
+        formed = false;
+        dimX = dimY = dimZ = 0;
+        interiorVolume = 0;
+        unformedReason = reason;
     }
+
+    private boolean isShellBlock(BlockPos pos) {
+        var block = level.getBlockState(pos).getBlock();
+        return block instanceof TurbineCasingBlock || block instanceof TurbineControllerBlock;
+    }
+
+    // --- Display ----------------------------------------------------------------------------
 
     @Override
     public boolean addToGoggleTooltip(List<Component> tooltip, boolean isPlayerSneaking) {
-        DwarvenLang.translate("gui.turbine.structure", structureSize, MIN_CASING)
-                .style(formed ? ChatFormatting.GREEN : ChatFormatting.RED)
-                .forGoggles(tooltip);
+        if (formed) {
+            DwarvenLang.translate("gui.turbine.formed", dimX, dimY, dimZ)
+                    .style(ChatFormatting.GREEN)
+                    .forGoggles(tooltip);
+        } else {
+            DwarvenLang.translate("gui.turbine.unformed")
+                    .style(ChatFormatting.RED)
+                    .forGoggles(tooltip);
+            DwarvenLang.translate(unformedHintKey())
+                    .style(ChatFormatting.GRAY)
+                    .forGoggles(tooltip);
+        }
         if (currentPowerWatts > 0)
             DwarvenLang.translate("gui.turbine.output", (int) Math.round(currentPowerWatts))
                     .style(ChatFormatting.AQUA)
@@ -183,11 +282,25 @@ public class TurbineControllerBlockEntity extends SmartBlockEntity implements IH
         return true;
     }
 
+    private String unformedHintKey() {
+        return switch (unformedReason) {
+            case REASON_SHELL -> "gui.turbine.hint.shell";
+            case REASON_CHAMBER -> "gui.turbine.hint.chamber";
+            default -> "gui.turbine.hint.size";
+        };
+    }
+
+    // --- Persistence / sync -----------------------------------------------------------------
+
     @Override
     protected void write(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
         super.write(compound, registries, clientPacket);
         compound.putBoolean("Formed", formed);
-        compound.putInt("StructureSize", structureSize);
+        compound.putInt("DimX", dimX);
+        compound.putInt("DimY", dimY);
+        compound.putInt("DimZ", dimZ);
+        compound.putInt("Interior", interiorVolume);
+        compound.putInt("Reason", unformedReason);
         compound.putDouble("Power", currentPowerWatts);
         if (clientPacket)
             compound.putBoolean("Burning", currentPowerWatts > 0);
@@ -197,7 +310,11 @@ public class TurbineControllerBlockEntity extends SmartBlockEntity implements IH
     protected void read(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
         super.read(compound, registries, clientPacket);
         formed = compound.getBoolean("Formed");
-        structureSize = compound.getInt("StructureSize");
+        dimX = compound.getInt("DimX");
+        dimY = compound.getInt("DimY");
+        dimZ = compound.getInt("DimZ");
+        interiorVolume = compound.getInt("Interior");
+        unformedReason = compound.getInt("Reason");
         currentPowerWatts = compound.getDouble("Power");
         if (clientPacket)
             turbineSpeed.updateChaseTarget(compound.getBoolean("Burning") ? 1024f : 0f);

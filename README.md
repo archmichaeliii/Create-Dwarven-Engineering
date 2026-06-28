@@ -68,22 +68,24 @@ file, and copy the trailing number from its URL into the matching property.
 
 ## Verifying in-game
 
-1. Build a box of **Turbine Casing** (≥ 4 connected blocks).
-2. Place a **Turbine Controller** touching the casing.
-3. Pipe a Petrochem fuel (e.g. **diesel** or **gasoline**) into the controller from any side.
-4. Attach EE **wires** to the controller's two top terminals and run them to an **energy meter** or
+1. Build a **hollow box of Turbine Casing**, 3–7 blocks per side, with one **Turbine Controller** set
+   into a wall and an empty interior (the combustion chamber). The goggles read **Formed: w×h×d** once
+   it's valid, or **Unformed** with a hint (too small / walls incomplete / chamber not empty).
+2. Pipe a Petrochem fuel (e.g. **diesel** or **gasoline**) into the controller from any side.
+3. Attach EE **wires** to the controller's two top terminals and run them to an **energy meter** or
    **electric motor**.
-5. Goggles on the controller show casing count and live Watt output. Confirm higher-grade fuel and a
-   larger casing both raise the output, and that breaking casing below the minimum stops it.
+4. Confirm that higher-grade fuel and a larger chamber both raise the Watt output, and that breaking a
+   casing block un-forms the turbine and drops output to zero.
 
 ## Implementation notes
 
 - The turbine is a power **source** for Electro Energetics: its block implements EE's
   `ElectricalDeviceBlock` and registers a `SimulatedDeviceType`; EE's chunk hook then instantiates a
   `TurbineDevice extends GeneratingDevice` automatically (no EE changes required).
-- v1 uses a **controller-driven casing scan** to form the multiblock (lighter than Create's
-  `ConnectivityHandler`/`FluidTankBlockEntity` machinery). Moving to a full Create connectivity
-  multiblock is a natural future enhancement; the in-game experience is the same.
+- The multiblock is a **hollow casing box** validated by the controller itself in its block-entity
+  `lazyTick` (it re-checks the shape ~twice a second to form and disassemble). Because the controller
+  is also the fixed-position electrical device, it can't use Create's corner-reassigning
+  `ConnectivityHandler`, so validation is self-contained — no member block-entities required.
 - Follow-ups: bespoke models/textures + animated rotor renderer, a Ponder scene, a JEI fuel
   category, sounds, config, and a balance pass.
 

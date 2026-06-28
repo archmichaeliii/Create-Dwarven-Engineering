@@ -22,7 +22,11 @@ public class DwarvenDatagen {
             return;
         DwarvenEngineering.registrate().addDataGenerator(ProviderType.LANG, provider -> {
             provider.add("itemGroup.dwarvenengineering.main", "Create: Dwarven Engineering");
-            provider.add("dwarvenengineering.gui.turbine.structure", "Casing Blocks: %1$s (min %2$s)");
+            provider.add("dwarvenengineering.gui.turbine.formed", "Formed: %1$s×%2$s×%3$s");
+            provider.add("dwarvenengineering.gui.turbine.unformed", "Unformed turbine");
+            provider.add("dwarvenengineering.gui.turbine.hint.size", "Build a hollow casing box, 3-7 blocks per side");
+            provider.add("dwarvenengineering.gui.turbine.hint.shell", "The casing walls are incomplete");
+            provider.add("dwarvenengineering.gui.turbine.hint.chamber", "Clear the inner combustion chamber");
             provider.add("dwarvenengineering.gui.turbine.output", "Output: %1$s W");
         });
     }
