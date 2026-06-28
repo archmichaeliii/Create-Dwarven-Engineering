@@ -1,0 +1,6 @@
+{
+    "type": "dwarvenengineering:turbine_fuel",
+    "fluid": "petrochem:diesel",
+    "burn_rate": 6,
+    "power": 3072
+}

@@ -1,0 +1,53 @@
+modLoader="javafml" #mandatory
+loaderVersion="${loader_version_range}" #mandatory
+license="${mod_license}"
+
+[[mods]] #mandatory
+modId="${mod_id}" #mandatory
+version="${mod_version}" #mandatory
+displayName="${mod_name}" #mandatory
+authors="archmichaeliii"
+description='''
+Create: Dwarven Engineering — heavy industrial machines for Create. Adds a multiblock
+fuel turbine that burns Petrochem's refined fuels and feeds native electrical power into
+the Create: Electro Energetics grid.
+'''
+
+# --- Dependencies ---
+[[dependencies.${mod_id}]] #optional
+    modId="neoforge" #mandatory
+    type="required" #mandatory
+    versionRange="[${neo_version},)" #mandatory
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="minecraft"
+    type="required"
+    versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="create"
+    type="required"
+    versionRange="[6.0,)"
+    ordering="AFTER"
+    side="BOTH"
+
+# The turbine is a power SOURCE for Electro Energetics — load after it so its
+# device registry and electrical framework are available.
+[[dependencies.${mod_id}]]
+    modId="electroenergetics"
+    type="required"
+    versionRange="[1.21.1-1.1.0,)"
+    ordering="AFTER"
+    side="BOTH"
+
+# The turbine burns Petrochem's fuels — load after it so its fluids exist.
+[[dependencies.${mod_id}]]
+    modId="petrochem"
+    type="required"
+    versionRange="[1.2.0,)"
+    ordering="AFTER"
+    side="BOTH"
