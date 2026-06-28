@@ -1,0 +1,6 @@
+{
+    "type": "dwarvenengineering:turbine_fuel",
+    "fluid": "petrochem:lpg",
+    "burn_rate": 10,
+    "power": 4608
+}

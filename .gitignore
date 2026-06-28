@@ -1,0 +1,28 @@
+# Gradle / build
+.gradle/
+build/
+out/
+repo/
+
+# Local dev run directories
+run/
+runs/
+run-data/
+
+# Sibling addon jars dropped in for local compilation (see README "Building")
+libs/*.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.classpath
+.project
+eclipse/
+.eclipse/
+
+# OS
+.DS_Store
