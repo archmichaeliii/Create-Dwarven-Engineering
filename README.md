@@ -47,23 +47,23 @@ or override fuels from any datapack.
 
 ## Building
 
-Requires JDK 21. The Create stack (Create, Ponder, Flywheel, Registrate, JEI) resolves from the
-public mavens already listed in `build.gradle`. You must additionally provide the two sibling
-addons; pick **one** strategy and enable it in `build.gradle` (and, for option C, `settings.gradle`):
+Requires JDK 21. Every dependency resolves automatically from public mavens declared in
+`build.gradle` — the Create stack (Create, Ponder, Flywheel, Registrate, JEI) plus the two sibling
+addons via [cursemaven](https://www.cursemaven.com/):
 
-- **(A) Local jars** *(default)* — drop the built mod jars into `libs/`:
-  `electroenergetics-neoforge-1.21.1-*.jar` and `petrochem-neoforge-1.21.1-*.jar`.
-- **(B) CurseForge maven** — uncomment the `curse.maven:...` lines and fill in the project/file IDs.
-- **(C) Gradle composite build** — if the sibling repos sit next to this one, uncomment the
-  `includeBuild` lines in `settings.gradle` and switch to the sibling module coordinates.
+- **Create: Electro Energetics** — `curse.maven:create-electro-energetics-1443327:<file>` *(compile +
+  runtime — the turbine subclasses its `GeneratingDevice` / `ElectricalDeviceBlock`)*.
+- **Petrochem** — `curse.maven:create-petrochem-1494004:<file>` *(runtime only — fuels are referenced
+  by id)*.
 
-> Electro Energetics is needed on the **compile** classpath (the turbine subclasses its
-> `GeneratingDevice` / `ElectricalDeviceBlock`); Petrochem is only needed at **runtime**.
+The CurseForge **file ids** are pinned in `gradle.properties` (`electroenergetics_file`,
+`petrochem_file`). To move to a newer release, open the mod's **Files** tab on CurseForge, click the
+file, and copy the trailing number from its URL into the matching property.
 
 ```bash
 ./gradlew runData      # generate blockstates/models/lang
 ./gradlew build        # compile + package
-./gradlew runClient    # launch with Create + Electro Energetics + Petrochem installed
+./gradlew runClient    # launch with Create + Electro Energetics + Petrochem (all auto-resolved)
 ```
 
 ## Verifying in-game

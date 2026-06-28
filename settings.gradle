@@ -7,11 +7,3 @@ pluginManagement {
 plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
-
-// --- Optional: Gradle composite build of the sibling addons ---
-// If you have the sibling repos checked out next to this one (as in the dev
-// container at /home/user), uncommenting these lets Gradle compile against
-// their source directly instead of pulling published jars. See build.gradle
-// "Sibling addon dependencies" for the matching module coordinates.
-// includeBuild '../Create-Electro-Energetics'
-// includeBuild '../Petrochem'

@@ -23,12 +23,6 @@ repositories {
             includeGroup "curse.maven"
         }
     }
-    flatDir {
-        // Drop sibling addon jars (electroenergetics, petrochem) here to compile
-        // against them without a maven/composite setup. See "Sibling addon
-        // dependencies" below and the README.
-        dirs 'libs'
-    }
 }
 
 base {
@@ -94,27 +88,12 @@ dependencies {
     compileOnly("mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}")
     runtimeOnly("mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}")
 
-    // --- Sibling addon dependencies ---
-    // Create: Electro Energetics is REQUIRED on the compile classpath: the turbine
-    // subclasses GeneratingDevice and implements ElectricalDeviceBlock.
-    // Petrochem is only needed at RUNTIME (its fuels are referenced by id in data).
-    //
-    // Pick ONE sourcing strategy and uncomment it (see README for details):
-    //
-    //   (A) Local jars in libs/  (works with the flatDir repo above):
-    compileOnly("electroenergetics:electroenergetics-neoforge-${minecraft_version}:${electroenergetics_version}")
-    runtimeOnly("electroenergetics:electroenergetics-neoforge-${minecraft_version}:${electroenergetics_version}")
-    runtimeOnly("petrochem:petrochem-neoforge-${minecraft_version}:${petrochem_version}")
-    //
-    //   (B) CurseForge maven (fill in the project/file IDs from CurseForge):
-    // compileOnly("curse.maven:create-electro-energetics-PROJECTID:FILEID")
-    // runtimeOnly("curse.maven:create-electro-energetics-PROJECTID:FILEID")
-    // runtimeOnly("curse.maven:petrochem-PROJECTID:FILEID")
-    //
-    //   (C) Gradle composite build: uncomment the includeBuild lines in
-    //       settings.gradle and replace the coordinates above with the sibling
-    //       module coords (com.george_vi.electroenergetics:electroenergetics-neoforge-1.21.1
-    //       and io.github.hadron13.gearbox:petrochem-neoforge-1.21.1).
+    // --- Sibling Create addons (CurseForge via cursemaven) ---
+    // Create: Electro Energetics — compile + runtime: the turbine subclasses EE's
+    // GeneratingDevice and implements ElectricalDeviceBlock.
+    implementation("curse.maven:create-electro-energetics-${electroenergetics_project}:${electroenergetics_file}")
+    // Petrochem — runtime only: its fuels are referenced by id in data, not in code.
+    runtimeOnly("curse.maven:create-petrochem-${petrochem_project}:${petrochem_file}")
 }
 
 // Expand mod metadata templates (neoforge.mods.toml) with gradle.properties values.
